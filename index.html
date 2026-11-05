@@ -11,15 +11,14 @@
 <body>
     <main class="container">
         <h1>🚗 Consulta Tabela FIPE</h1>
-        <p class="subtitulo">Dados fornecidos pela <a href="https://brasilapi.com.br/" target="_blank">BrasilAPI</a></p>
+        <p class="subtitulo">Dados fornecidos pela <a href="https://brasilapi.com.br/" target="_blank" rel="noopener noreferrer">BrasilAPI</a></p>
 
-        <!-- ===== 1. CONSULTA PELO CÓDIGO FIPE ===== -->
         <section class="card">
             <h2>Consultar preço</h2>
 
-            <form id="formFipe">
+            <form id="formFipe" novalidate>
                 <label for="codigoFipe">Código FIPE</label>
-                <input type="text" id="codigoFipe" placeholder="Ex.: 001004-9" required>
+                <input type="text" id="codigoFipe" placeholder="Ex.: 001004-9" inputmode="numeric" maxlength="8" required>
 
                 <label for="tabelaReferencia">Mês de referência</label>
                 <select id="tabelaReferencia">
@@ -30,22 +29,18 @@
             </form>
         </section>
 
-        <!-- ===== 2. INDICADOR DE PROCESSAMENTO ===== -->
-        <!-- Fica escondido (classe "oculto") e aparece enquanto a requisição está em andamento -->
-        <div id="loading" class="loading oculto">
+        <div id="loading" class="loading oculto" role="status" aria-live="polite">
             <div class="spinner"></div>
-            <span id="loadingTexto">Consultando a tabela FIPE...</span>
+            <span>Consultando a tabela FIPE...</span>
         </div>
 
-        <!-- Mensagens de erro -->
-        <div id="status" class="status"></div>
+        <div id="status" class="status" role="alert" aria-live="assertive"></div>
 
-        <!-- ===== 3. RESULTADO ===== -->
-        <section id="resultado"></section>
+        <section id="resultado" aria-live="polite"></section>
 
-        <!-- ===== 4. EXPLORAR MARCAS E MODELOS (extra) ===== -->
         <section class="card">
-            <h2>Não sabe o código? Explore marcas e modelos</h2>
+            <h2>Explore marcas e modelos</h2>
+            <p class="dica">Veja os modelos disponíveis de cada marca na tabela FIPE.</p>
 
             <label for="tipoVeiculo">Tipo de veículo</label>
             <select id="tipoVeiculo">
@@ -55,9 +50,16 @@
             </select>
 
             <label for="marca">Marca</label>
-            <select id="marca">
+            <select id="marca" disabled>
                 <option value="">Carregando marcas...</option>
             </select>
+
+            <div id="loadingModelos" class="loading loading-modelos oculto" role="status" aria-live="polite">
+                <div class="spinner"></div>
+                <span>Buscando modelos...</span>
+            </div>
+
+            <div id="statusModelos" class="status" role="alert" aria-live="assertive"></div>
 
             <ul id="listaModelos" class="lista-modelos"></ul>
         </section>

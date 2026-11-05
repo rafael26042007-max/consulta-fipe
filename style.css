@@ -68,7 +68,6 @@ button:disabled {
     cursor: wait;
 }
 
-/* ===== LOADING ===== */
 .loading {
     display: flex;
     align-items: center;
@@ -98,10 +97,28 @@ button:disabled {
     display: none;
 }
 
-/* ===== MENSAGENS E RESULTADO ===== */
 .status {
     color: #c0392b;
     margin-bottom: 12px;
+}
+
+.status:empty {
+    margin: 0;
+}
+
+.dica {
+    margin-top: 0;
+    color: #5b6475;
+    font-size: 0.9rem;
+}
+
+.loading-modelos {
+    margin: 16px 0 0;
+}
+
+select:disabled {
+    background: #f1f3f6;
+    cursor: wait;
 }
 
 .preco {
