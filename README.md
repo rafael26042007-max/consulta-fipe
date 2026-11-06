@@ -6,7 +6,7 @@ Feita com HTML, CSS e JavaScript puro, sem frameworks e sem dependências.
 ## Funcionalidades
 
 - **Consultar preço pelo código FIPE** (ex.: `001004-9`), com opção de escolher o mês de referência.
-- **Explorar marcas e modelos** por tipo de veículo (carros, motos ou caminhões), para quem não sabe o código.
+- **Explorar marcas e modelos** por tipo de veículo (carros, motos ou caminhões), para ver os nomes dos modelos disponíveis na tabela FIPE. Essa lista mostra **só os nomes**, sem preço (veja [Limitações](#limitações)).
 - **Indicador de carregamento** (spinner) enquanto a API responde.
 - **Mensagens de erro** amigáveis quando o código não existe ou a API falha.
 
@@ -129,6 +129,7 @@ Busca os **modelos** da marca escolhida e mostra numa lista (`<ul>`).
 - **`if (!selectMarca.value) return;`** é um *early return*: se nenhuma marca foi escolhida, a função para ali mesmo.
 - Cria um `<li>` para cada modelo.
 - Usa o mesmo padrão `try / catch / finally` com loading.
+- Mostra **apenas o nome** do modelo (`m.modelo`), porque esse endpoint não devolve preço, ano nem código FIPE.
 
 ### 9. Eventos e inicialização
 
@@ -166,6 +167,21 @@ renderResultado  mostra mensagem no #status
         ▼
   esconderLoading (finally)
 ```
+
+## Limitações
+
+**A lista de modelos não mostra preço.** O endpoint `GET /api/fipe/veiculos/v1/{tipoVeiculo}/{codigoMarca}` da BrasilAPI devolve só o nome de cada modelo:
+
+```json
+[
+  { "modelo": "BLACKLINE FXS" },
+  { "modelo": "BREAKOUT FXBR" }
+]
+```
+
+O preço só vem do endpoint `/preco/v1/{codigoFipe}`, que exige o **código FIPE**, e a lista de modelos não informa esse código. Por isso não dá para ligar "modelo → preço" usando só a BrasilAPI.
+
+**Instabilidade da API.** A BrasilAPI às vezes responde com erro (5xx) na consulta de preço. Nesse caso a página mostra uma mensagem avisando que a API está com problemas e pedindo para tentar mais tarde.
 
 ## Tecnologias e conceitos
 
