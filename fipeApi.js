@@ -1,179 +1,408 @@
-// ===== CONFIGURAÇÃO =====
-const BASE_URL = "https://brasilapi.com.br/api/fipe";
+const BASE_URL = "https://fipe.parallelum.com.br/api/v2";
+const TOKEN = "";
+const FORMATO_CODIGO = /^\d{6}-\d$/;
+const TIPOS = ["cars", "motorcycles", "trucks"];
+const ZERO_KM = 32000;
 
-// ===== ELEMENTOS DA TELA =====
-const formFipe = document.getElementById("formFipe");
-const inputCodigo = document.getElementById("codigoFipe");
-const selectTabela = document.getElementById("tabelaReferencia");
-const btnConsultar = document.getElementById("btnConsultar");
-const loading = document.getElementById("loading");
-const loadingTexto = document.getElementById("loadingTexto");
-const status = document.getElementById("status");
-const resultado = document.getElementById("resultado");
+const selectReferencia = document.getElementById("referencia");
+
 const selectTipo = document.getElementById("tipoVeiculo");
 const selectMarca = document.getElementById("marca");
-const listaModelos = document.getElementById("listaModelos");
+const inputFiltroModelo = document.getElementById("filtroModelo");
+const selectModelo = document.getElementById("modelo");
+const selectAno = document.getElementById("ano");
+const loadingCarro = document.getElementById("loadingCarro");
+const loadingCarroTexto = document.getElementById("loadingCarroTexto");
+const statusCarro = document.getElementById("statusCarro");
+const resultadoCarro = document.getElementById("resultadoCarro");
+
+const formCodigo = document.getElementById("formCodigo");
+const inputCodigo = document.getElementById("codigoFipe");
+const btnConsultar = document.getElementById("btnConsultar");
+const loadingCodigo = document.getElementById("loadingCodigo");
+const statusCodigo = document.getElementById("statusCodigo");
+const resultadoCodigo = document.getElementById("resultadoCodigo");
+
+const controladores = {};
+let modelosDaMarca = [];
 
 
-// ===== INDICADOR DE PROCESSAMENTO =====
-// Mostra/esconde o spinner e trava o botão para evitar cliques repetidos
-function mostrarLoading(texto) {
-    loadingTexto.textContent = texto;
-    loading.classList.remove("oculto");
-    btnConsultar.disabled = true;
-}
-
-function esconderLoading() {
-    loading.classList.add("oculto");
-    btnConsultar.disabled = false;
-}
-
-
-// ===== FUNÇÃO GENÉRICA DE REQUISIÇÃO =====
-// Faz o fetch, verifica se deu certo e devolve o JSON
-async function buscarNaApi(url, mensagemErro) {
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(mensagemErro);
+class ErroApi extends Error {
+    constructor(mensagem, status) {
+        super(mensagem);
+        this.status = status;
     }
-    return await response.json();
+}
+
+function novoControlador(nome) {
+    controladores[nome]?.abort();
+    controladores[nome] = new AbortController();
+    return controladores[nome].signal;
+}
+
+function cancelar(...nomes) {
+    nomes.forEach(nome => controladores[nome]?.abort());
+}
+
+function foiCancelado(error) {
+    return error.name === "AbortError";
 }
 
 
-// ===== 1. CONSULTAR PREÇO PELO CÓDIGO FIPE =====
-// GET /fipe/preco/v1/{codigoFipe}?tabela_referencia={codigo}
-async function consultarPreco(event) {
-    event.preventDefault(); // impede o form de recarregar a página
+function montarUrl(caminho) {
+    const url = new URL(BASE_URL + caminho);
+    if (selectReferencia.value) {
+        url.searchParams.set("reference", selectReferencia.value);
+    }
+    return url;
+}
+
+async function buscarNaApi(caminho, signal) {
+    const opcoes = { signal };
+    if (TOKEN) opcoes.headers = { "X-Subscription-Token": TOKEN };
+
+    let response;
+    try {
+        response = await fetch(montarUrl(caminho), opcoes);
+    }
+    catch (error) {
+        if (foiCancelado(error)) throw error;
+        throw new ErroApi("Sem conexão com a internet ou a API está fora do ar. Tente novamente.", 0);
+    }
+
+    if (response.status === 400 || response.status === 404) {
+        throw new ErroApi("Nada encontrado na tabela FIPE para essa busca.", response.status);
+    }
+    if (response.status === 429) {
+        throw new ErroApi("Limite diário de consultas da API atingido. Tente novamente amanhã.", 429);
+    }
+    if (!response.ok) {
+        throw new ErroApi("A API da FIPE está com problemas no momento. Tente novamente mais tarde.", response.status);
+    }
+    return response.json();
+}
+
+
+function criarElemento(tag, classe, texto) {
+    const elemento = document.createElement(tag);
+    if (classe) elemento.className = classe;
+    if (texto !== undefined) elemento.textContent = texto;
+    return elemento;
+}
+
+function criarLinha(rotulo, valor) {
+    const linha = criarElemento("p", "linha");
+    linha.append(`${rotulo}: `, criarElemento("strong", "", valor));
+    return linha;
+}
+
+function textoAno(anoModelo) {
+    return anoModelo === ZERO_KM ? "Zero KM" : String(anoModelo);
+}
+
+function nomeDoAno(nome) {
+    return nome.replace(/^32000\b/, "Zero KM");
+}
+
+function normalizar(texto) {
+    return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+function preencherSelect(select, primeiraOpcao, itens) {
+    select.replaceChildren(
+        new Option(primeiraOpcao, ""),
+        ...itens.map(item => new Option(item.texto, item.valor))
+    );
+}
+
+function resetarSelect(select, texto) {
+    select.replaceChildren(new Option(texto, ""));
+    select.disabled = true;
+}
+
+function mostrarLoading(elemento, ativo) {
+    elemento.classList.toggle("oculto", !ativo);
+}
+
+
+function criarCardPreco(detalhe) {
+    const card = criarElemento("div", "resultado-preco");
+    card.append(
+        criarElemento("p", "rotulo-valor", "Valor na tabela FIPE"),
+        criarElemento("p", "valor-grande", detalhe.price),
+        criarElemento("h3", "", `${detalhe.brand} — ${detalhe.model}`),
+        criarLinha("Ano", textoAno(detalhe.modelYear)),
+        criarLinha("Combustível", detalhe.fuel),
+        criarLinha("Código FIPE", detalhe.codeFipe),
+        criarLinha("Referência", detalhe.referenceMonth.trim())
+    );
+    return card;
+}
+
+
+async function carregarReferencias() {
+    try {
+        const referencias = await buscarNaApi("/references");
+        [...referencias]
+            .sort((a, b) => Number(b.code) - Number(a.code))
+            .slice(0, 12)
+            .forEach(r => selectReferencia.appendChild(new Option(r.month.trim(), r.code)));
+    }
+    catch (error) {
+        console.error(error.message);
+    }
+}
+
+function trocarReferencia() {
+    resultadoCodigo.replaceChildren();
+    statusCodigo.textContent = "";
+    carregarMarcas();
+}
+
+
+async function carregarMarcas() {
+    cancelar("modelos", "anos", "preco");
+    const signal = novoControlador("marcas");
+
+    resetarSelect(selectMarca, "Carregando marcas...");
+    resetarSelect(selectModelo, "Escolha uma marca primeiro");
+    resetarSelect(selectAno, "Escolha um modelo primeiro");
+    inputFiltroModelo.value = "";
+    inputFiltroModelo.disabled = true;
+    modelosDaMarca = [];
+    resultadoCarro.replaceChildren();
+    statusCarro.textContent = "";
+    mostrarLoading(loadingCarro, false);
+
+    try {
+        const marcas = await buscarNaApi(`/${selectTipo.value}/brands`, signal);
+        preencherSelect(selectMarca, "Selecione a marca", marcas.map(m => ({ texto: m.name, valor: m.code })));
+        selectMarca.disabled = false;
+    }
+    catch (error) {
+        if (foiCancelado(error)) return;
+        resetarSelect(selectMarca, "Erro ao carregar marcas");
+        statusCarro.textContent = error.message;
+    }
+}
+
+
+async function carregarModelos() {
+    cancelar("anos", "preco");
+    resetarSelect(selectModelo, "Carregando modelos...");
+    resetarSelect(selectAno, "Escolha um modelo primeiro");
+    inputFiltroModelo.value = "";
+    inputFiltroModelo.disabled = true;
+    modelosDaMarca = [];
+    resultadoCarro.replaceChildren();
+    statusCarro.textContent = "";
+
+    if (!selectMarca.value) {
+        cancelar("modelos");
+        resetarSelect(selectModelo, "Escolha uma marca primeiro");
+        mostrarLoading(loadingCarro, false);
+        return;
+    }
+
+    const signal = novoControlador("modelos");
+    loadingCarroTexto.textContent = "Buscando modelos...";
+    mostrarLoading(loadingCarro, true);
+
+    try {
+        modelosDaMarca = await buscarNaApi(`/${selectTipo.value}/brands/${encodeURIComponent(selectMarca.value)}/models`, signal);
+        inputFiltroModelo.disabled = false;
+        selectModelo.disabled = false;
+        filtrarModelos();
+    }
+    catch (error) {
+        if (foiCancelado(error)) return;
+        resetarSelect(selectModelo, "Erro ao carregar modelos");
+        statusCarro.textContent = error.message;
+    }
+    finally {
+        if (!signal.aborted) mostrarLoading(loadingCarro, false);
+    }
+}
+
+function filtrarModelos() {
+    const busca = normalizar(inputFiltroModelo.value.trim());
+    const encontrados = modelosDaMarca.filter(m => normalizar(m.name).includes(busca));
+    const selecionado = selectModelo.value;
+
+    const primeiraOpcao = encontrados.length
+        ? `Selecione o modelo (${encontrados.length} encontrados)`
+        : "Nenhum modelo com esse nome";
+    preencherSelect(selectModelo, primeiraOpcao, encontrados.map(m => ({ texto: m.name, valor: m.code })));
+
+    if (encontrados.some(m => m.code === selecionado)) {
+        selectModelo.value = selecionado;
+    }
+    else if (selecionado) {
+        cancelar("anos", "preco");
+        resetarSelect(selectAno, "Escolha um modelo primeiro");
+        resultadoCarro.replaceChildren();
+        mostrarLoading(loadingCarro, false);
+    }
+}
+
+
+async function carregarAnos() {
+    cancelar("preco");
+    resetarSelect(selectAno, "Carregando anos...");
+    resultadoCarro.replaceChildren();
+    statusCarro.textContent = "";
+
+    if (!selectModelo.value) {
+        cancelar("anos");
+        resetarSelect(selectAno, "Escolha um modelo primeiro");
+        mostrarLoading(loadingCarro, false);
+        return;
+    }
+
+    const signal = novoControlador("anos");
+    loadingCarroTexto.textContent = "Buscando anos...";
+    mostrarLoading(loadingCarro, true);
+
+    try {
+        const caminho = `/${selectTipo.value}/brands/${encodeURIComponent(selectMarca.value)}/models/${encodeURIComponent(selectModelo.value)}/years`;
+        const anos = await buscarNaApi(caminho, signal);
+
+        preencherSelect(selectAno, "Selecione o ano", anos.map(a => ({ texto: nomeDoAno(a.name), valor: a.code })));
+        selectAno.disabled = false;
+
+        if (anos.length === 1) {
+            selectAno.value = anos[0].code;
+        }
+    }
+    catch (error) {
+        if (foiCancelado(error)) return;
+        resetarSelect(selectAno, "Erro ao carregar anos");
+        statusCarro.textContent = error.message;
+    }
+    finally {
+        if (!signal.aborted) mostrarLoading(loadingCarro, false);
+    }
+
+    if (!signal.aborted && selectAno.value) {
+        carregarPrecoCarro();
+    }
+}
+
+
+async function carregarPrecoCarro() {
+    resultadoCarro.replaceChildren();
+    statusCarro.textContent = "";
+
+    if (!selectAno.value) {
+        cancelar("preco");
+        mostrarLoading(loadingCarro, false);
+        return;
+    }
+
+    const signal = novoControlador("preco");
+    loadingCarroTexto.textContent = "Consultando o valor FIPE...";
+    mostrarLoading(loadingCarro, true);
+
+    try {
+        const caminho = `/${selectTipo.value}/brands/${encodeURIComponent(selectMarca.value)}/models/${encodeURIComponent(selectModelo.value)}/years/${encodeURIComponent(selectAno.value)}`;
+        const detalhe = await buscarNaApi(caminho, signal);
+        resultadoCarro.appendChild(criarCardPreco(detalhe));
+    }
+    catch (error) {
+        if (foiCancelado(error)) return;
+        statusCarro.textContent = error.message;
+    }
+    finally {
+        if (!signal.aborted) mostrarLoading(loadingCarro, false);
+    }
+}
+
+
+async function descobrirTipoEAnos(codigo, signal) {
+    for (const tipo of TIPOS) {
+        try {
+            const anos = await buscarNaApi(`/${tipo}/${encodeURIComponent(codigo)}/years`, signal);
+            if (Array.isArray(anos) && anos.length > 0) {
+                return { tipo, anos };
+            }
+        }
+        catch (error) {
+            if (error.status !== 404 && error.status !== 400) throw error;
+        }
+    }
+    throw new ErroApi("Código FIPE não encontrado. Confira se digitou certo.", 404);
+}
+
+async function consultarCodigo(event) {
+    event.preventDefault();
 
     const codigo = inputCodigo.value.trim();
-    const tabela = selectTabela.value;
+    resultadoCodigo.replaceChildren();
+    statusCodigo.textContent = "";
 
-    status.textContent = "";
-    resultado.innerHTML = "";
-    mostrarLoading("Consultando a tabela FIPE...");
+    if (!FORMATO_CODIGO.test(codigo)) {
+        statusCodigo.textContent = "Formato inválido. Use 6 números, hífen e 1 número (ex.: 004278-1).";
+        return;
+    }
+
+    const signal = novoControlador("codigo");
+    btnConsultar.disabled = true;
+    mostrarLoading(loadingCodigo, true);
 
     try {
-        let url = `${BASE_URL}/preco/v1/${codigo}`;
-        if (tabela) {
-            url += `?tabela_referencia=${tabela}`;
+        const { tipo, anos } = await descobrirTipoEAnos(codigo, signal);
+        const detalhes = await Promise.all(
+            anos.map(a => buscarNaApi(`/${tipo}/${encodeURIComponent(codigo)}/years/${encodeURIComponent(a.code)}`, signal))
+        );
+        renderResultadoCodigo(detalhes);
+    }
+    catch (error) {
+        if (foiCancelado(error)) return;
+        statusCodigo.textContent = error.message;
+    }
+    finally {
+        if (!signal.aborted) {
+            mostrarLoading(loadingCodigo, false);
+            btnConsultar.disabled = false;
         }
-
-        const veiculos = await buscarNaApi(url, "Código FIPE não encontrado. Confira o formato (ex.: 001004-9).");
-        renderResultado(veiculos);
-    }
-    catch (error) {
-        status.textContent = error.message;
-    }
-    finally {
-        // "finally" roda dando certo ou errado: o loading sempre some
-        esconderLoading();
     }
 }
 
-// A API devolve uma lista: um item para cada ano-modelo daquele código
-function renderResultado(veiculos) {
-    const primeiro = veiculos[0];
+function renderResultadoCodigo(detalhes) {
+    const primeiro = detalhes[0];
 
-    const titulo = document.createElement("div");
-    titulo.className = "card";
-    titulo.innerHTML = `
-        <h2>${primeiro.marca} — ${primeiro.modelo}</h2>
-        <p>Código FIPE: <strong>${primeiro.codigoFipe}</strong></p>
-        <p>Referência: <strong>${primeiro.mesReferencia}</strong></p>
-    `;
-    resultado.appendChild(titulo);
+    const titulo = criarElemento("div", "resultado-titulo");
+    titulo.append(
+        criarElemento("h3", "", `${primeiro.brand} — ${primeiro.model}`),
+        criarLinha("Código FIPE", primeiro.codeFipe),
+        criarLinha("Referência", primeiro.referenceMonth.trim())
+    );
+    resultadoCodigo.appendChild(titulo);
 
-    veiculos.forEach(v => {
-        // A FIPE usa 32000 para indicar veículo "Zero KM"
-        const ano = v.anoModelo === 32000 ? "Zero KM" : v.anoModelo;
+    [...detalhes]
+        .sort((a, b) => b.modelYear - a.modelYear)
+        .forEach(d => {
+            const info = criarElemento("div");
+            info.append(
+                criarElemento("span", "ano", textoAno(d.modelYear)),
+                criarElemento("span", "combustivel", d.fuel)
+            );
 
-        const item = document.createElement("div");
-        item.className = "card preco";
-        item.innerHTML = `
-            <div>
-                <span class="ano">${ano}</span>
-                <span class="combustivel">${v.combustivel}</span>
-            </div>
-            <span class="valor">${v.valor}</span>
-        `;
-        resultado.appendChild(item);
-    });
-}
-
-
-// ===== 2. TABELAS DE REFERÊNCIA (meses) =====
-// GET /fipe/tabelas/v1
-async function carregarTabelas() {
-    try {
-        const tabelas = await buscarNaApi(`${BASE_URL}/tabelas/v1`, "Erro ao carregar meses de referência");
-
-        // Mostra só os 12 meses mais recentes para a lista não ficar gigante
-        tabelas.slice(0, 12).forEach(t => {
-            const option = document.createElement("option");
-            option.value = t.codigo;
-            option.textContent = t.mes;
-            selectTabela.appendChild(option);
+            const item = criarElemento("div", "preco");
+            item.append(info, criarElemento("span", "valor", d.price));
+            resultadoCodigo.appendChild(item);
         });
-    }
-    catch (error) {
-        console.error(error.message); // não é crítico: a consulta funciona sem isso
-    }
 }
 
 
-// ===== 3. MARCAS POR TIPO DE VEÍCULO =====
-// GET /fipe/marcas/v1/{tipoVeiculo}
-async function carregarMarcas() {
-    selectMarca.innerHTML = `<option value="">Carregando marcas...</option>`;
-    listaModelos.innerHTML = "";
-
-    try {
-        const marcas = await buscarNaApi(`${BASE_URL}/marcas/v1/${selectTipo.value}`, "Erro ao carregar marcas");
-
-        selectMarca.innerHTML = `<option value="">Selecione uma marca</option>`;
-        marcas.forEach(m => {
-            const option = document.createElement("option");
-            option.value = m.valor; // código da marca
-            option.textContent = m.nome;
-            selectMarca.appendChild(option);
-        });
-    }
-    catch (error) {
-        selectMarca.innerHTML = `<option value="">${error.message}</option>`;
-    }
-}
-
-
-// ===== 4. MODELOS DE UMA MARCA =====
-// GET /fipe/veiculos/v1/{tipoVeiculo}/{codigoMarca}
-async function carregarModelos() {
-    listaModelos.innerHTML = "";
-    if (!selectMarca.value) return;
-
-    mostrarLoading("Buscando modelos...");
-    try {
-        const url = `${BASE_URL}/veiculos/v1/${selectTipo.value}/${selectMarca.value}`;
-        const modelos = await buscarNaApi(url, "Erro ao carregar modelos");
-
-        modelos.forEach(m => {
-            const li = document.createElement("li");
-            li.textContent = m.modelo;
-            listaModelos.appendChild(li);
-        });
-    }
-    catch (error) {
-        status.textContent = error.message;
-    }
-    finally {
-        esconderLoading();
-    }
-}
-
-
-// ===== EVENTOS E INICIALIZAÇÃO =====
-formFipe.addEventListener("submit", consultarPreco);
+selectReferencia.addEventListener("change", trocarReferencia);
 selectTipo.addEventListener("change", carregarMarcas);
 selectMarca.addEventListener("change", carregarModelos);
+inputFiltroModelo.addEventListener("input", filtrarModelos);
+selectModelo.addEventListener("change", carregarAnos);
+selectAno.addEventListener("change", carregarPrecoCarro);
+formCodigo.addEventListener("submit", consultarCodigo);
+inputCodigo.addEventListener("input", () => { statusCodigo.textContent = ""; });
 
-carregarTabelas();
+carregarReferencias();
 carregarMarcas();
