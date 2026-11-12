@@ -11,42 +11,23 @@
 <body>
     <main class="container">
         <h1>🚗 Consulta Tabela FIPE</h1>
-        <p class="subtitulo">Dados fornecidos pela <a href="https://brasilapi.com.br/" target="_blank" rel="noopener noreferrer">BrasilAPI</a></p>
+        <p class="subtitulo">Dados fornecidos pela <a href="https://fipe.api.br/" target="_blank" rel="noopener noreferrer">API FIPE (Parallelum)</a></p>
 
         <section class="card">
-            <h2>Consultar preço</h2>
-
-            <form id="formFipe" novalidate>
-                <label for="codigoFipe">Código FIPE</label>
-                <input type="text" id="codigoFipe" placeholder="Ex.: 001004-9" inputmode="numeric" maxlength="8" required>
-
-                <label for="tabelaReferencia">Mês de referência</label>
-                <select id="tabelaReferencia">
-                    <option value="">Mais recente</option>
-                </select>
-
-                <button type="submit" id="btnConsultar">Consultar</button>
-            </form>
+            <label for="referencia">Mês de referência</label>
+            <select id="referencia">
+                <option value="">Mais recente</option>
+            </select>
         </section>
 
-        <div id="loading" class="loading oculto" role="status" aria-live="polite">
-            <div class="spinner"></div>
-            <span>Consultando a tabela FIPE...</span>
-        </div>
-
-        <div id="status" class="status" role="alert" aria-live="assertive"></div>
-
-        <section id="resultado" aria-live="polite"></section>
-
         <section class="card">
-            <h2>Explore marcas e modelos</h2>
-            <p class="dica">Veja os modelos disponíveis de cada marca na tabela FIPE.</p>
+            <h2>Buscar pelo carro</h2>
 
             <label for="tipoVeiculo">Tipo de veículo</label>
             <select id="tipoVeiculo">
-                <option value="carros">Carros</option>
-                <option value="motos">Motos</option>
-                <option value="caminhoes">Caminhões</option>
+                <option value="cars">Carros</option>
+                <option value="motorcycles">Motos</option>
+                <option value="trucks">Caminhões</option>
             </select>
 
             <label for="marca">Marca</label>
@@ -54,14 +35,45 @@
                 <option value="">Carregando marcas...</option>
             </select>
 
-            <div id="loadingModelos" class="loading loading-modelos oculto" role="status" aria-live="polite">
+            <label for="filtroModelo">Modelo</label>
+            <input type="search" id="filtroModelo" placeholder="Digite para filtrar (ex.: Gol, Onix 1.0)" autocomplete="off" disabled>
+            <select id="modelo" disabled>
+                <option value="">Escolha uma marca primeiro</option>
+            </select>
+
+            <label for="ano">Ano</label>
+            <select id="ano" disabled>
+                <option value="">Escolha um modelo primeiro</option>
+            </select>
+
+            <div id="loadingCarro" class="loading oculto" role="status" aria-live="polite">
                 <div class="spinner"></div>
-                <span>Buscando modelos...</span>
+                <span id="loadingCarroTexto">Carregando...</span>
             </div>
 
-            <div id="statusModelos" class="status" role="alert" aria-live="assertive"></div>
+            <div id="statusCarro" class="status" role="alert" aria-live="assertive"></div>
 
-            <ul id="listaModelos" class="lista-modelos"></ul>
+            <div id="resultadoCarro" aria-live="polite"></div>
+        </section>
+
+        <section class="card">
+            <h2>Buscar pelo código FIPE</h2>
+
+            <form id="formCodigo" novalidate>
+                <label for="codigoFipe">Código FIPE</label>
+                <input type="text" id="codigoFipe" placeholder="Ex.: 004278-1" inputmode="numeric" maxlength="8" autocomplete="off" required>
+
+                <button type="submit" id="btnConsultar">Consultar</button>
+            </form>
+
+            <div id="loadingCodigo" class="loading oculto" role="status" aria-live="polite">
+                <div class="spinner"></div>
+                <span>Consultando a tabela FIPE...</span>
+            </div>
+
+            <div id="statusCodigo" class="status" role="alert" aria-live="assertive"></div>
+
+            <div id="resultadoCodigo" aria-live="polite"></div>
         </section>
     </main>
 
